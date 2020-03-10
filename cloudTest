@@ -1240,7 +1240,7 @@ function collectText() {
 
  function callCampaignData(selectedCampaign,fieldInput,updateUI){
   var userenc = encodeURIComponent(clearUndefined(globalPulledUser));
-  $("#storePg").load("https://cloud.greatwolf.com/processInputsFullScope?campaign=" + clearUndefined(selectedCampaign) + "&input=" + encodeURI(clearUndefined(fieldInput)) + "&changeID=" + clearUndefined(globalSelectedChangeID) + "&username=" + userenc + " div#resultOut",
+  $("#storePg").load("https://cloud.greatwolf.com/backendpulltest?campaign=" + clearUndefined(selectedCampaign) + "&input=" + encodeURI(clearUndefined(fieldInput)) + "&changeID=" + clearUndefined(globalSelectedChangeID) + "&username=" + userenc + " div#resultOut",
      function () {
 
   var campaignFields = "";
