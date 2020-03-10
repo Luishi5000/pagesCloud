@@ -1,0 +1,845 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Untitled Document</title>
+</head>
+
+<script type="javascript" runat="server">
+Platform.Load("core","1");
+var ip = Platform.Request.ClientIP();
+Variable.SetValue("ip",ip);
+</script>
+
+ <div id="resultOut">
+
+
+
+    %%[
+    /* ------------------ Gather Header Information ------------------ */
+  SET @logLayer = "2"
+
+  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("updateid: 005")) ENDIF
+
+
+  SET @requestedCampaign = RequestParameter('campaign')                                                                                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("requestedCampaign: ",@requestedCampaign)) ENDIF
+  SET @dataInput = RequestParameter('input')                                                                                                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("dataInput: ",@dataInput)) ENDIF
+  SET @requestedSegment = RequestParameter('segment')                                                                                                                                   IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("requestedSegment: ",@requestedSegment)) ENDIF
+  SET @currentChangeSet = RequestParameter('changeID')                                                                                                                                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("currentChangeSet in: ",@currentChangeSet)) ENDIF
+  SET @inUsername = RequestParameter('username')                                                                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("username in: ",@inUsername)) ENDIF
+
+  SET @statusMessage = "normal_response"
+  SET @rootDE = "rootCampaignDatabase3"
+
+  SET @campaignNameInput = RequestParameter("campaignNameInputName")
+  SET @campaignDescription = RequestParameter("campaignDescription")
+  SET @date1 = Replace(RequestParameter("date1"),"/","-")
+  SET @date2 = Replace(RequestParameter("date2"),"/","-")
+  SET @savedshow = 0
+  SET @updateCount = 0
+  SET @selectedCampaign = ""
+  SET @segmentOutput = ""
+  SET @segmentString = ""
+  SET @propertyOutput = ""
+  SET @fieldIndexString = ""
+  SET @newTmpRow = ""
+  SET @createPropDEName = ""
+  SET @changeID = ""
+  SET @lookupRecordsDE = ""
+  SET @buildCampaignVisibility = ""
+  SET @buildPropertyVisibility = ""
+  SET @propertyOptions = ""
+  SET @createSegmentTestDE = ""
+  SET @userLoginUsername = ""
+  SET @userLoginPassword = ""
+  SET @userLoggedIn = ""
+  SET @userForgotUsername = ""
+  SET @userCreatedSuccess = ""
+  SET @messageStatus = ""
+
+  SET @rsFieldsIndex = LookupOrderedRows('create_campaign_fields_index',100,'order asc','return','return')
+  SET @rcFieldsIndex = RowCount(@rsFieldsIndex)                                                                                                         IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcFieldsIndex: ",@rcFieldsIndex))) ENDIF
+
+
+  IF NOT EMPTY(@requestedCampaign) THEN
+   SET @selectedCampaign = @requestedCampaign
+   SET @changeID = Lookup(@rootDE,'changeID','rootCampaignTgtDE',@selectedCampaign)                                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Get change id: ",@changeID)) ENDIF
+  ENDIF
+
+  InsertDE("portalv2log","logVal",CONCAT("dataInput: ",@dataInput))
+
+  /* ------------------ User Payload Process, get payload, pull password, create token with ip, if it matches, then match against token list ------------------ */
+  IF NOT EMPTY(@inUsername) THEN
+    SET @indexSlice = IndexOf(@inUsername,'|')
+    SET @username = Substring(@inUsername,1,subtract(@indexSlice,1))                                                                                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("username: ",@username)) ENDIF
+    SET @token = Substring(@inUsername,add(@indexSlice,1),length(@inUsername))                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("token: ",@token)) ENDIF
+
+    SET @getTokens = Lookup('timber_userbase',"token","username",@username)                                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("get tokens: ",@getTokens)) ENDIF
+    SET @getUserPassword = Lookup('timber_userbase',"password","username",@username)                                                                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("get user password: ", @getUserPassword)) ENDIF
+    SET @generateCompareToken = EncryptSymmetric(CONCAT(@getUserPassword,@ip), 'AES', @null, 'hardCoded2goKey0k', @null, '0000000000000000', @null, '00000000000000000000000000000000')   IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("generateCompareToken: ", @generateCompareToken)) ENDIF
+
+    IF @generateCompareToken == @token THEN                                                                                                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("compare tokens: ",@generateCompareToken, " and ",@token)) ENDIF
+      IF IndexOf(@getTokens,@token) > 0 THEN                                                                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("not found")) ENDIF
+        SET @userLoggedIn = @username                                                                                                                   IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("user logged in as: ", @userLoggedIn)) ENDIF
+      ENDIF
+    ELSE
+        SET @messageStatus = "INVALID PASS"                                                                                                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("pass invalid - mismatch in keys")) ENDIF
+    ENDIF
+  ENDIF
+
+
+
+ /* ------------------ Handle Input Processing - Assign Input to Vars - Set root campaign variables if they are present ------------------ */
+
+  SET @rsDataParse1 = BuildRowSetFromString(@dataInput,'¦')
+
+  SET @rcDataParse1 = RowCount(@rsDataParse1)                                                                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rowcount: ",@rcDataParse1)) ENDIF
+
+  IF @rcDataParse1 > 0 THEN
+
+   FOR @d = 1 TO @rcDataParse1 DO
+
+    SET @d1Selection = Field(ROW(@rsDataParse1,@d),1)                                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("d1Selection: ",@d1Selection)) ENDIF
+
+    SET @rsDataParse2 = BuildRowSetFromString(@d1Selection,'|')
+    SET @rcDataParse2 = RowCount(@rsDataParse2)                                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rcDataParse2: ",@rcDataParse2)) ENDIF
+
+
+    /* - If 3 records then campaign root or user login, NO DATA CHANGES TO BE MADE HERE - */
+    IF @rcDataParse2 == 3 THEN
+      SET @checkString = Field(ROW(@rsDataParse2,1),1)                                                                    IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("root checkvalue: ",@checkString)) ENDIF
+      IF IndexOf(@checkString, "root") > 0 THEN                                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rootSubstring detected~~~")) ENDIF
+        SET @fieldTarget = Trim(Field(ROW(@rsDataParse2,2),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTarget)) ENDIF
+        SET @fieldData = Trim(Field(ROW(@rsDataParse2,3),1))                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+
+        IF @fieldTarget == "rootCampaignName" THEN SET @campaignNameIN = @fieldData                                       IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: campaignNameIN to ",@fieldData)) ENDIF ENDIF
+        IF @fieldTarget == "rootCampaignDesc" THEN SET @campaignDescriptionIN = @fieldData                                IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: campaignDescriptionIN to ",@fieldData)) ENDIF ENDIF
+        IF @fieldTarget == "rootDateStart" THEN SET @campaignStartDateIN = @fieldData                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: campaignStartDateIN to ",@fieldData)) ENDIF ENDIF
+        IF @fieldTarget == "rootDateEnd" THEN SET @campaignEndDateIN = @fieldData                                         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: campaignEndDateIN to ",@fieldData)) ENDIF ENDIF
+        IF @fieldTarget == "rootHTML" THEN SET @rootHTMLIN = @fieldData                                                   IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: rootHTMLIN to ",@fieldData)) ENDIF ENDIF
+        IF @fieldTarget == "campaignFieldOptions" THEN SET @campaignFieldsIN = @fieldData                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: campaignFieldOptionsIN to ",@fieldData)) ENDIF ENDIF
+        IF @fieldTarget == "propertyFieldOptions" THEN SET @propertyFieldsIN = @fieldData                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: propertyFieldsIN to ",@fieldData)) ENDIF ENDIF
+        IF @fieldTarget == "campaignNameDE" THEN SET @campaignNameDEIN = @fieldData                                       IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: campaignNameDE to ",@fieldData)) ENDIF ENDIF
+      ENDIF
+
+      IF IndexOf(@checkString, "createNewCampaign") > 0 THEN                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("create campaign detected~~~")) ENDIF
+        SET @fieldTarget = Trim(Field(ROW(@rsDataParse2,2),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTarget)) ENDIF
+        SET @fieldData = Trim(Field(ROW(@rsDataParse2,3),1))                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+
+        IF @fieldTarget == "propertyOptions" THEN SET @propertyOptions = @fieldData                                       IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: campaignNameIN to ",@fieldData)) ENDIF ENDIF
+      ENDIF
+
+      IF IndexOf(@checkString, "userCreatePass") > 0 THEN                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("create pass detected~~~")) ENDIF
+        SET @fieldTarget = Trim(Field(ROW(@rsDataParse2,2),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTarget)) ENDIF
+        SET @fieldData = Trim(Field(ROW(@rsDataParse2,3),1))                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+
+        SET @pwtoken = replace(@checkString,"userCreatePass","")                                                          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: pwtoken to ",@pwtoken)) ENDIF
+        SET @userCreateUsername = @fieldTarget                                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: userCreateUsername to ",@fieldTarget)) ENDIF
+        SET @userCreatePassword = @fieldData                                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: userCreatePassword to ",@fieldData)) ENDIF
+      ENDIF
+
+      IF IndexOf(@checkString, "userLogin") > 0 THEN                                                                      IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("login detected~~~")) ENDIF
+        SET @fieldTarget = Trim(Field(ROW(@rsDataParse2,2),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTarget)) ENDIF
+        SET @fieldData = Trim(Field(ROW(@rsDataParse2,3),1))                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+
+        SET @userLoginUsername = @fieldTarget                                                                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: userLoginUsername to ",@fieldTarget)) ENDIF
+        SET @userLoginPassword = @fieldData                                                                               IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: userLoginPassword to ",@fieldData)) ENDIF
+      ENDIF
+
+      IF IndexOf(@checkString, "forgotUserPass") > 0 THEN                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("resetPass detect~~~")) ENDIF
+        SET @fieldTarget = Trim(Field(ROW(@rsDataParse2,2),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTarget)) ENDIF
+        SET @fieldData = Trim(Field(ROW(@rsDataParse2,3),1))                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+        SET @userForgotUsername = @fieldTarget                                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: userForgotUsername to ",@fieldTarget)) ENDIF
+      ENDIF
+
+
+      /*IF IndexOf(@checkString, "createSegmentTest") > 0 THEN                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rootSubstring detected~~~")) ENDIF
+        SET @fieldTarget = Trim(Field(ROW(@rsDataParse2,2),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTarget)) ENDIF
+        SET @fieldData = Trim(Field(ROW(@rsDataParse2,3),1))                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+
+        SET @createSegmentTestDE = @fieldTarget                                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: createSegmentTestDE to ",@fieldTarget)) ENDIF
+        SET @createSegmentTestID = @fieldData                                                                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: createSegmentTestID to ",@fieldData)) ENDIF
+      ENDIF*/
+
+
+      /*IF IndexOf(@checkString, "segment") > 0 THEN                                                                      IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rootSubstring detected~~~")) ENDIF
+        SET @fieldTarget = Trim(Field(ROW(@rsDataParse2,2),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTarget)) ENDIF
+        SET @fieldData = Trim(Field(ROW(@rsDataParse2,3),1))                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+
+        IF @rcFieldsIndex > 0 THEN                                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcFieldsIndex ",@rcFieldsIndex))) ENDIF
+          FOR @i = 1 TO @rcFieldsIndex DO
+            SET @ritem = ROW(@rsFieldsIndex,@i)                                                                           IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("ritem: ",@ritem))) ENDIF
+            SET @fieldName = FIELD(@rfield,'Name')
+          NEXT @i
+        ENDIF
+
+      ENDIF*/
+
+    ENDIF
+
+    IF NOT EMPTY(@userLoggedIn) THEN /* - USER LOGIN REQUIREMENT - */
+    /* - If 5 records then segment or data append - */
+      IF @rcDataParse2 == 5 THEN
+
+       SET @fieldTargetDE = Trim(Field(ROW(@rsDataParse2,1),1))                                                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTargetDE)) ENDIF
+       SET @fieldTargetType = Trim(Field(ROW(@rsDataParse2,2),1))                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTargetType: ",@fieldTargetType)) ENDIF
+       SET @fieldTargetRow = Trim(Field(ROW(@rsDataParse2,3),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTargetRow: ",@fieldTargetRow)) ENDIF
+       SET @fieldTargetVar = Trim(Field(ROW(@rsDataParse2,4),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTargetVar: ",@fieldTargetVar)) ENDIF
+       SET @fieldData = Trim(Field(ROW(@rsDataParse2,5),1))                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+
+
+       SET @lookupExisting = "lookupExisting"                                                                               IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExisting)) ENDIF
+       SET @lookupExisting = Lookup(@fieldTargetDE,@fieldTargetVar,@fieldTargetType,@fieldTargetRow)                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExisting)) ENDIF
+       /* newRow is a requirement for setting subsiquent rows to the new target, it is sent in as the first field */
+       IF @fieldTargetRow == "newRow" THEN SET @newTmpRow = @fieldData SET @lookupExisting = "new" ENDIF                    IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExisting)) ENDIF
+       IF @fieldTargetRow == "new" THEN SET @fieldTargetRow = @newTmpRow SET @lookupExisting = "new" ENDIF                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExisting)) ENDIF
+
+       SET @lookupRecordsDE = Lookup(@rootDE,'recordsDE','rootCampaignTgtDE',@selectedCampaign)                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupRecordsDE to ",@lookupRecordsDE)) ENDIF
+       SET @changeID = Lookup(@rootDE,'changeID','rootCampaignTgtDE',@selectedCampaign)                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Get change id: ",@changeID)) ENDIF
+       SET @changeID = Add(@changeID,1)                                                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Increment ChangeID: ",@changeID)) ENDIF
+       UpdateDE(@rootDE,1,'rootCampaignTgtDE',@selectedCampaign,'changeID',@changeID)                                       IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Updated misc vars de: ",@changeID)) ENDIF
+
+       IF (@lookupExisting != "lookupExisting") AND (Trim(@lookupExisting) != "") THEN                                      IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: preUpdate to ",@lookupExisting)) ENDIF
+
+        IF ((@lookupExisting == "new") AND (@fieldTargetRow == "newRow")) THEN                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("yes new, lookup tgtRow: ",@fieldTargetRow)) ENDIF
+          IF @fieldTargetRow == "newRow" THEN                                                                               IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("pre insert")) ENDIF
+            InsertDE(@fieldTargetDE,@fieldTargetType,@fieldData)                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("inserted: ",@fieldTargetDE," - ",@fieldTargetType," - ",@fieldData)) ENDIF
+            SET @createPropCampaignID = @fieldData                                                                          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("createPropCampaignID: ", @createPropCampaignID)) ENDIF
+            SET @createPropDETgt = @fieldTargetDE                                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("createPropDETgt: ", @fieldTargetDE)) ENDIF
+            SET @createPropDEName = CONCAT(REPLACE(@createPropDETgt,"MASTER_DE","SEGMENT_"),@createPropCampaignID)          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set createPropCampaignID: ",@createPropCampaignID)) ENDIF
+          ENDIF
+        ELSE                                                                                                                IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("else+++++")) ENDIF
+          UpsertData(@fieldTargetDE,1,@fieldTargetType,@fieldTargetRow,@fieldTargetVar,@fieldData)                          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("UPDATED DE: ",@fieldTargetDE," on type: ",@fieldTargetType, " on row: ",@fieldTargetRow, " on var: ",@fieldTargetVar," with value: ", @fieldData)) ENDIF
+        ENDIF
+
+      ELSE                                                                                                                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("else+++++ EMPTY FIELD ADD UPDATE")) ENDIF
+        UpsertData(@fieldTargetDE,1,@fieldTargetType,@fieldTargetRow,@fieldTargetVar,@fieldData)                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("UPDATED DE: ",@fieldTargetDE," on type: ",@fieldTargetType, " on row: ",@fieldTargetRow, " on var: ",@fieldTargetVar," with value: ", @fieldData)) ENDIF
+      ENDIF
+
+        IF NOT EMPTY(@lookupRecordsDE) THEN                                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("not empty: ",@lookupRecordsDE)) ENDIF
+          InsertDE(@lookupRecordsDE,'changeID',@changeID,'timestamp',NOW(),'user',@userLoggedIn,'previousVal',@lookupExisting,'newVal',@fieldData,'dataExtension',@fieldTargetDE,'deField',@fieldTargetVar,'deRow',@fieldTargetRow,'deRowType',@fieldTargetType)        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("insert log record: ",@lookupRecordsDE,' changeID: ',@changeID)) ENDIF
+        ENDIF
+
+        SET @updateCount = Add(@updateCount,1)                                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set update string count to: ",@updateCount)) ENDIF
+
+        Set @statusMessage = CONCAT("Updated record count: ", @updateCount)
+
+      ENDIF
+
+      IF @rcDataParse2 == 6 THEN
+
+        SET @fieldTargetDE = Trim(Field(ROW(@rsDataParse2,1),1))                                                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTarget: ",@fieldTargetDE)) ENDIF
+        SET @fieldTargetType = Trim(Field(ROW(@rsDataParse2,2),1))                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTargetType: ",@fieldTargetType)) ENDIF
+        SET @fieldTargetRow = Trim(Field(ROW(@rsDataParse2,3),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTargetRow: ",@fieldTargetRow)) ENDIF
+        SET @fieldTargetVar = Trim(Field(ROW(@rsDataParse2,4),1))                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldTargetVar: ",@fieldTargetVar)) ENDIF
+        SET @fieldData = Trim(Field(ROW(@rsDataParse2,5),1))                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("fieldData: ",@fieldData)) ENDIF
+
+        SET @lookupExisting = "lookupExisting"                                                                               IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExisting)) ENDIF
+        SET @lookupExisting = Lookup(@fieldTargetDE,@fieldTargetVar,@fieldTargetType,@fieldTargetRow)                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExisting)) ENDIF
+
+        SET @lookupRecordsDE = Lookup(@rootDE,'recordsDE','rootCampaignTgtDE',@selectedCampaign)                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupRecordsDE to ",@lookupRecordsDE)) ENDIF
+        SET @changeID = Lookup(@rootDE,'changeID','rootCampaignTgtDE',@selectedCampaign)                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Get change id: ",@changeID)) ENDIF
+        SET @changeID = Add(@changeID,1)                                                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Increment ChangeID: ",@changeID)) ENDIF
+        UpdateDE(@rootDE,1,'rootCampaignTgtDE',@selectedCampaign,'changeID',@changeID)                                       IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Updated misc vars de: ",@changeID)) ENDIF
+
+        IF NOT EMPTY(@lookupRecordsDE) THEN                                                                                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("not empty: ",@lookupRecordsDE)) ENDIF
+          InsertDE(@lookupRecordsDE,'changeID',@changeID,'timestamp',NOW(),'user',@userLoggedIn,'previousVal','comment','newVal',@fieldData,'dataExtension',@fieldTargetDE,'deField',@fieldTargetVar,'deRow',@fieldTargetRow,'deRowType',@fieldTargetType)        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("insert log record: ",@lookupRecordsDE,' changeID: ',@changeID)) ENDIF
+        ENDIF
+
+      ENDIF
+
+    ENDIF /* - END USER LOGIN REQUIREMENT - */
+
+   NEXT @d
+
+  ENDIF
+
+  /* - - - - - - - - - - - - - User Create and Pull - - - - - - - - - - - - - */
+
+  IF NOT EMPTY(@userCreatePassword) THEN
+    IF NOT EMPTY(@userCreateUsername) THEN
+      SET @lookupExistingToken = Lookup('timber_userbase',"pwtoken","username",@userCreateUsername)                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExistingToken to ",@lookupExistingToken)) ENDIF
+      IF (@lookupExistingToken == @pwtoken) THEN
+        SET @passEncrypt = EncryptSymmetric(@userCreatePassword, 'AES', @null, 'hardCoded2goKey0k', @null, '0000000000000000', @null, '00000000000000000000000000000000')
+        UpdateData('timber_userbase',1,'username',@userCreateUsername,'password',@passEncrypt)                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("update username: ",@userCreateUsername," pass: ",@passEncrypt)) ENDIF
+        SET @userLoginUsername = @userCreateUsername
+        SET @userLoginPassword = @userCreatePassword
+        SET @messageStatus = CONCAT("Created User Password: ", @userLoginUsername)                                                                          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("userCreatedSuccess: ",@userCreatedSuccess)) ENDIF
+      ENDIF
+   ENDIF
+  ENDIF
+
+  IF NOT EMPTY(@userLoginUsername) THEN
+    IF NOT EMPTY(@userLoginPassword) THEN
+      SET @passEncrypt = EncryptSymmetric(@userLoginPassword, 'AES', @null, 'hardCoded2goKey0k', @null, '0000000000000000', @null, '00000000000000000000000000000000')
+      SET @lookupExistingPass = Lookup('timber_userbase',"password","username",@userLoginUsername)                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExistingPass," then lookup ",@userLoginUsername)) ENDIF
+                                                                                                                                                          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("pass encrypt equals: ",@passEncrypt," and ", @lookupExistingPass)) ENDIF
+      IF (@passEncrypt == @lookupExistingPass) THEN
+        SET @generateToken = EncryptSymmetric(CONCAT(@passEncrypt,@ip), 'AES', @null, 'hardCoded2goKey0k', @null, '0000000000000000', @null, '00000000000000000000000000000000')  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("generate token: ",@generateToken)) ENDIF
+        SET @getTokens = Lookup('timber_userbase',"token","username",@userLoginUsername)                                                                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("get tokens: ",@getTokens)) ENDIF
+        IF IndexOf(@getTokens,@generateToken) == 0 THEN                                                                                                   IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("not found")) ENDIF
+          UpdateData('timber_userbase',1,'username',@userLoginUsername,'token',CONCAT(@getTokens,@generateToken))                                         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("add token: ",@getTokens,@generateToken)) ENDIF
+        ENDIF
+        SET @userLoggedIn = @userLoginUsername
+      ENDIF
+    ENDIF
+  ENDIF
+
+  IF NOT EMPTY(@userForgotUsername) THEN
+    SET @getEmail = Lookup('timber_userbase',"emailAddress","username",@userForgotUsername)                                                                      IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("lookup email: ",@getTokens)) ENDIF
+    IF NOT EMPTY(@getEmail) THEN
+      SET @tokenEncrypt = EncryptSymmetric(RANDOM(1,999999999), 'AES', @null, 'hardCoded2goKey0k', @null, '0000000000000000', @null, '00000000000000000000000000000000')
+      UpdateData('timber_userbase',1,'username',@userForgotUsername,'pwtoken',@tokenEncrypt)                                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("add token: ",@getTokens,@generateToken)) ENDIF
+      SET @emailInfo = CONCAT("https://cloud.greatwolf.com/campaign_page_full_draft?pwtoken=",@tokenEncrypt)                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("emailInfo: ",@emailInfo)) ENDIF
+      SET @ts = CreateObject("TriggeredSend")
+      SET @tsDef = CreateObject("TriggeredSendDefinition")
+      SET @ts_subkey = @getEmail
+      SetObjectProperty(@tsDef, "CustomerKey", "1207801")
+      SetObjectProperty(@ts, "TriggeredSendDefinition", @tsDef)
+      SET @ts_sub = CreateObject("Subscriber")
+      SetObjectProperty(@ts_sub, "EmailAddress", @ts_subkey)
+      SetObjectProperty(@ts_sub, "SubscriberKey", @ts_subkey)
+
+      SET @ts_col = CreateObject("Attribute")
+      SetObjectProperty(@ts_col, "Name", "DEfield1")
+      SetObjectProperty(@ts_col, "Value", @emailInfo)
+      AddObjectArrayItem(@ts_sub, "Attributes", @ts_col)
+
+      AddObjectArrayItem(@ts, "Subscribers", @ts_sub)
+      SET @ts_statusCode = InvokeCreate(@ts, @ts_statusMsg, @errorCode)                                                                                   IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("create msg status: ",@ts_statusCode)) ENDIF
+
+      IF (@ts_statusCode == "OK") THEN
+        SET @messageStatus = "Password Email Sent"
+      ELSE
+        SET @messageStatus = "Error Setting Password"
+      ENDIF
+    ELSE
+      SET @messageStatus = "Username Not Found"
+    ENDIF
+  ENDIF
+
+ IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("if user not empty: ",@userLoggedIn)) ENDIF
+ IF NOT EMPTY(@userLoggedIn) THEN /* - USER LOGIN REQUIREMENT - */                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("user is logged in: ",@userLoggedIn)) ENDIF
+
+ /* - - - - - - - - - - - - - Check Required Fields to Create a Campaign - Update assigned vars in root data extension - - - - - - - - - - - - - */
+
+  SET @campaign_create = 0
+
+  IF NOT EMPTY(@campaignNameIN) THEN
+   SET @lookupExisting = "lookupExisting"                                                                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExisting)) ENDIF
+   SET @lookupExisting = Lookup(@rootDE,"rootCampaignName","rootCampaignName",@campaignNameIN)                                                            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: lookupExisting to ",@lookupExisting)) ENDIF
+
+   IF (@lookupExisting != "lookupExisting") AND (Trim(@lookupExisting) != "") THEN                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: preUpdate to ",@lookupExisting)) ENDIF
+
+     IF NOT EMPTY(@campaignDescriptionIN) THEN UpdateData(@rootDE,1,'rootCampaignName',@campaignNameIN,'rootCampaignDesc',@campaignDescriptionIN)         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("update rootCampaignDesc: ",@campaignDescriptionIN)) ENDIF ENDIF
+     IF NOT EMPTY(@campaignStartDateIN) THEN UpdateData(@rootDE,1,'rootCampaignName',@campaignNameIN,'rootDateStart',@campaignStartDateIN)                IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("update rootDateStart: ",@campaignStartDateIN)) ENDIF ENDIF
+     IF NOT EMPTY(@campaignEndDateIN) THEN UpdateData(@rootDE,1,'rootCampaignName',@campaignNameIN,'rootDateEnd',@campaignEndDateIN)                      IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("update rootDateEnd: ",@campaignEndDateIN)) ENDIF ENDIF
+     IF NOT EMPTY(@rootHTMLIN) THEN UpdateData(@rootDE,1,'rootCampaignName',@campaignNameIN,'vHTML',@rootHTMLIN)                                          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("update vHTML: ",@rootHTMLIN)) ENDIF ENDIF
+     IF NOT EMPTY(@campaignNameDEIN) THEN UpdateData(@rootDE,1,'rootCampaignName',@campaignNameIN,'rootCampaignTgtDE',@campaignNameDEIN)                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("update rootCampaignTgtDE: ",@campaignNameDEIN)) ENDIF ENDIF
+     IF NOT EMPTY(@campaignFieldsIN) THEN UpdateData(@rootDE,1,'rootCampaignName',@campaignNameIN,'campaignFieldVisibility',@campaignFieldsIN)            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("update rootCampaignTgtDE: ",@campaignNameDEIN)) ENDIF ENDIF
+     IF NOT EMPTY(@propertyFieldsIN) THEN UpdateData(@rootDE,1,'rootCampaignName',@campaignNameIN,'propertyFieldVisibility',@propertyFieldsIN)            IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("update rootCampaignTgtDE: ",@propertyFieldsIN)) ENDIF ENDIF
+                                                                                                                                                          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: postUpdate to ",@lookupExisting)) ENDIF
+   ELSE
+    SET @campaign_create = 1                                                                                                                              IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("no existing campaign present, set create campaign flag")) ENDIF
+   ENDIF
+
+  ENDIF
+
+
+ /* ------------------ Inputs section - handle creating rootDE records and new master data extension ------------------ */
+
+ IF @campaign_create == 1 THEN
+
+    SET @campaignNameDE = CONCAT(Replace(Trim(@campaignNameIN),' ','_'),"_MASTER_DE")                                                                   IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set: campaignNameDE to ",@campaignNameDE)) ENDIF
+
+    /*CREATE THE DATA EXTENSION*/
+    Set @de = CreateObject("DataExtension")
+    SetObjectProperty(@de,"Name",@campaignNameDE)                                                                                                       IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object NAME prop to: ",@campaignNameDE)) ENDIF
+    SetObjectProperty(@de,"CustomerKey",CONCAT(@campaignNameDE,"_EK"))                                                                                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object CustomerKey prop to: ",CONCAT(@campaignNameDE,"EK"))) ENDIF
+    SetObjectProperty(@de,"Description","AutoCreatedDataExtension")                                                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object Description prop to: ","AutoCreatedDataExtension")) ENDIF
+    SetObjectProperty(@de,"IsSendable","False")                                                                                                         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object IsSendable prop to: ","False")) ENDIF
+    SetObjectProperty(@de,"IsTestable","False")                                                                                                         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object IsTestable prop to: ","False")) ENDIF
+
+    /*DE Folder ID - mouse over in app to get this ID */
+    SetObjectProperty(@de,"CategoryID","19593")                                                                                                         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set folder CategoryID to: ","19593")) ENDIF
+
+    /* Pull Data Extension Fields from index Data Extension */
+
+    SET @rsCampaignFields = LookupRows("create_campaign_fields_index",'return','return')
+    SET @rcCampaignFields = RowCount(@rsCampaignFields)                                                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Start Pull Fields for new DE - count: ",@rcCampaignFields)) ENDIF
+
+    IF @rcCampaignFields > 0 THEN
+
+     FOR @f = 1 TO @rcCampaignFields DO
+
+      SET @rCampaignFields = ROW(@rsCampaignFields,@f)                                                                                                  IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("Row For DE Equals: ",@f)) ENDIF
+
+      Set @deFields = CreateObject("DataExtensionField")
+      SetObjectProperty(@deFields,"Name",FIELD(@rCampaignFields,"Name"))                                                                                IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET NAME to : ",FIELD(@rCampaignFields,"Name"))) ENDIF
+      SetObjectProperty(@deFields,"MaxLength",FIELD(@rCampaignFields,"MaxLength"))                                                                      IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET MaxLength to : ",FIELD(@rCampaignFields,"MaxLength"))) ENDIF
+      SetObjectProperty(@deFields,"IsNillable",FIELD(@rCampaignFields,"IsNillable"))                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET IsNillable to : ",FIELD(@rCampaignFields,"IsNillable"))) ENDIF
+      SetObjectProperty(@deFields,"IsPrimaryKey",FIELD(@rCampaignFields,"IsPrimaryKey"))                                                                IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET IsPrimaryKey to : ",FIELD(@rCampaignFields,"IsPrimaryKey"))) ENDIF
+      SetObjectProperty(@deFields,"IsRequired",FIELD(@rCampaignFields,"IsRequired"))                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET IsRequired to : ",FIELD(@rCampaignFields,"IsRequired"))) ENDIF
+      SetObjectProperty(@deFields,"FieldType",FIELD(@rCampaignFields,"FieldType"))                                                                      IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET FieldType to : ",FIELD(@rCampaignFields,"FieldType"))) ENDIF
+      SetObjectProperty(@deFields,"DefaultValue",FIELD(@rCampaignFields,"Default"))                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET DefaultValue to : ",FIELD(@rCampaignFields,"Default"))) ENDIF
+
+      AddObjectArrayItem(@de,"Fields",@deFields)
+
+      IF EMPTY(@campaignFieldsIN) THEN
+        IF FIELD(@rCampaignFields,"defaultVis") == "true" THEN
+          SET @buildCampaignVisibility = CONCAT(@buildCampaignVisibility,FIELD(@rCampaignFields,"Name"),',')                                            IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET @buildCampaignVisibility to : ",@buildCampaignVisibility)) ENDIF
+        ENDIF
+      ELSE
+          SET @buildCampaignVisibility = @campaignFieldsIN                                                                                              IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET ELSE @buildCampaignVisibility to : ",@buildCampaignVisibility)) ENDIF
+      ENDIF
+
+     NEXT @f
+
+    ENDIF
+
+   SET @changeID = 1 /*If campaign is created, then set changeID to 1*/
+
+
+   Set @statusCode = InvokeCreate(@de, @StatMessage, @ErrorCode)                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Finalize fields code: ",@statusCode)) ENDIF
+
+
+
+  /* ------------------ Create Data Extension for Records ------------------ */
+
+  IF @statusCode == "OK" THEN
+  SET @campaignCount = Lookup("Horkew_misc_vars","val","var","campaign_count")
+
+     SET @campaignRecordsNameDE = CONCAT(Replace(Trim(@campaignNameIN),' ','_'),"_RECORD_DE")                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: set: campaignNameDE to ",@campaignNameDE)) ENDIF
+
+     /*CREATE THE DATA EXTENSION*/
+     Set @de = CreateObject("DataExtension")
+     SetObjectProperty(@de,"Name",@campaignRecordsNameDE)                                                                                               IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: set campaign Object NAME prop to: ",@campaignNameDE)) ENDIF
+     SetObjectProperty(@de,"CustomerKey",CONCAT(@campaignRecordsNameDE,"_EK"))                                                                          IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: set campaign Object CustomerKey prop to: ",CONCAT(@campaignNameDE,"EK"))) ENDIF
+     SetObjectProperty(@de,"Description","AutoCreatedDataExtension")                                                                                    IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: set campaign Object Description prop to: ","AutoCreatedDataExtension")) ENDIF
+     SetObjectProperty(@de,"IsSendable","False")                                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: set campaign Object IsSendable prop to: ","False")) ENDIF
+     SetObjectProperty(@de,"IsTestable","False")                                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: set campaign Object IsTestable prop to: ","False")) ENDIF
+
+     /*DE Folder ID - mouse over in app to get this ID */
+     SetObjectProperty(@de,"CategoryID","19593")                                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: set folder CategoryID to: ","19593")) ENDIF
+
+     /* Pull Data Extension Fields from index Data Extension */
+
+     SET @rsCampaignFields = LookupRows("create_campaign_log_index",'return','return')
+      SET @rcCampaignFields = RowCount(@rsCampaignFields)                                                                                               IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: Start Pull Fields for new DE - count: ",@rcCampaignFields)) ENDIF
+
+     IF @rcCampaignFields > 0 THEN
+
+      FOR @f = 1 TO @rcCampaignFields DO
+
+       SET @rCampaignFields = ROW(@rsCampaignFields,@f)                                                                                                 IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("Row For DE Equals: ",@f)) ENDIF
+
+       Set @deFields = CreateObject("DataExtensionField")
+       SetObjectProperty(@deFields,"Name",FIELD(@rCampaignFields,"Name"))                                                                               IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rec: SET NAME to : ",FIELD(@rCampaignFields,"Name"))) ENDIF
+       SetObjectProperty(@deFields,"MaxLength",FIELD(@rCampaignFields,"MaxLength"))                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rec: SET MaxLength to : ",FIELD(@rCampaignFields,"MaxLength"))) ENDIF
+       SetObjectProperty(@deFields,"IsNillable",FIELD(@rCampaignFields,"IsNillable"))                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rec: SET IsNillable to : ",FIELD(@rCampaignFields,"IsNillable"))) ENDIF
+       SetObjectProperty(@deFields,"IsPrimaryKey",FIELD(@rCampaignFields,"IsPrimaryKey"))                                                               IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rec: SET IsPrimaryKey to : ",FIELD(@rCampaignFields,"IsPrimaryKey"))) ENDIF
+       SetObjectProperty(@deFields,"IsRequired",FIELD(@rCampaignFields,"IsRequired"))                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rec: SET IsRequired to : ",FIELD(@rCampaignFields,"IsRequired"))) ENDIF
+       SetObjectProperty(@deFields,"FieldType",FIELD(@rCampaignFields,"FieldType"))                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rec: SET FieldType to : ",FIELD(@rCampaignFields,"FieldType"))) ENDIF
+       SetObjectProperty(@deFields,"DefaultValue",FIELD(@rCampaignFields,"Default"))                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rec: SET DefaultValue to : ",FIELD(@rCampaignFields,"Default"))) ENDIF
+
+       AddObjectArrayItem(@de,"Fields",@deFields)
+
+      NEXT @f
+
+     ENDIF
+
+    Set @statusCode2 = InvokeCreate(@de, @StatMessage, @ErrorCode)                                                                                      IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("rec: Finalize fields code: ",@statusCode2)) ENDIF
+
+   /* ------------------ End Create ------------------ */
+
+
+
+                                                                                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Get Campaign Count: ",@campaignCount)) ENDIF
+
+    InsertData('rootCampaignDatabase3','rootCampaignID',Add(@campaignCount,'1'),'rootCampaignName',@campaignNameIN,'rootCampaignTgtDE',@campaignNameDE,'rootCampaignDateCreated',NOW(),'rootCampaignDesc',@campaignDescriptionIN,'rootStatus','0','rootDateStart',@campaignStartDateIN,'rootDateEnd',@campaignEndDateIN,'vHTML',@rootHTMLIN,'recordsDE',@campaignRecordsNameDE,'changeID','1','campaignFieldVisibility',@buildCampaignVisibility)
+
+    SET @selectedCampaign = @campaignNameDE                                                                                                             IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Selected Campaign Post Insert: ", @selectedCampaign)) ENDIF
+                                                                                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Inserted Campaign data")) ENDIF
+    UpdateDE('Horkew_misc_vars',1,'var','campaign_count','val',Add(@campaignCount,'1'))                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Updated Count to: ",Add(@campaignCount,'1'))) ENDIF
+    Set @statusMessage = "Created Data Extension"
+
+    IF @statusCode2 == "OK" THEN
+     Set @statusMessage = "Created Data Extension+"
+    ELSE
+     SET @statusMessage = CONCAT("Failed to Create Records DE", @statusCode2)
+    ENDIF
+     ELSE
+    Set @statusMessage = CONCAT("Failed to Create Data Extension - Error: ", @statusCode)
+    ENDIF
+
+ ENDIF
+
+
+ /*If not creation trigger is populated, then make a segment DE if a new segment was added above */
+
+ IF NOT EMPTY(@createPropDEName) THEN
+
+   /*CREATE THE DATA EXTENSION*/
+   Set @de = CreateObject("DataExtension")
+   SetObjectProperty(@de,"Name",@createPropDEName)                                                                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object NAME prop to: ",@createPropDEName)) ENDIF
+   SetObjectProperty(@de,"CustomerKey",CONCAT(@createPropDEName,"_EK"))                                                                                IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object CustomerKey prop to: ",CONCAT(@createPropDEName,"EK"))) ENDIF
+   SetObjectProperty(@de,"Description","AutoCreatedDataExtension")                                                                                     IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object Description prop to: ","AutoCreatedDataExtension")) ENDIF
+   SetObjectProperty(@de,"IsSendable","False")                                                                                                         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object IsSendable prop to: ","False")) ENDIF
+   SetObjectProperty(@de,"IsTestable","False")                                                                                                         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set campaign Object IsTestable prop to: ","False")) ENDIF
+
+   /*DE Folder ID - mouse over in app to get this ID */
+   SetObjectProperty(@de,"CategoryID","19593")                                                                                                         IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("set folder CategoryID to: ","19593")) ENDIF
+
+   /* Pull Data Extension Fields from index Data Extension */
+
+   SET @rsCampaignFields = LookupRows("prop_campaign_fields_index",'return','return')
+   SET @rcCampaignFields = RowCount(@rsCampaignFields)                                                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Start Pull Fields for new DE - count: ",@rcCampaignFields)) ENDIF
+
+   IF @rcCampaignFields > 0 THEN
+
+    FOR @f = 1 TO @rcCampaignFields DO
+
+     SET @rCampaignFields = ROW(@rsCampaignFields,@f)                                                                                                  IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("Row For DE Equals: ",@f)) ENDIF
+
+     Set @deFields = CreateObject("DataExtensionField")
+     SetObjectProperty(@deFields,"Name",FIELD(@rCampaignFields,"Name"))                                                                                IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET NAME to : ",FIELD(@rCampaignFields,"Name"))) ENDIF
+     SetObjectProperty(@deFields,"MaxLength",FIELD(@rCampaignFields,"MaxLength"))                                                                      IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET MaxLength to : ",FIELD(@rCampaignFields,"MaxLength"))) ENDIF
+     SetObjectProperty(@deFields,"IsNillable",FIELD(@rCampaignFields,"IsNillable"))                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET IsNillable to : ",FIELD(@rCampaignFields,"IsNillable"))) ENDIF
+     SetObjectProperty(@deFields,"IsPrimaryKey",FIELD(@rCampaignFields,"IsPrimaryKey"))                                                                IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET IsPrimaryKey to : ",FIELD(@rCampaignFields,"IsPrimaryKey"))) ENDIF
+     SetObjectProperty(@deFields,"IsRequired",FIELD(@rCampaignFields,"IsRequired"))                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET IsRequired to : ",FIELD(@rCampaignFields,"IsRequired"))) ENDIF
+     SetObjectProperty(@deFields,"FieldType",FIELD(@rCampaignFields,"FieldType"))                                                                      IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET FieldType to : ",FIELD(@rCampaignFields,"FieldType"))) ENDIF
+     SetObjectProperty(@deFields,"DefaultValue",FIELD(@rCampaignFields,"Default"))                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET DefaultValue to : ",FIELD(@rCampaignFields,"Default"))) ENDIF
+
+     AddObjectArrayItem(@de,"Fields",@deFields)
+
+     IF FIELD(@rCampaignFields,"defaultVis") == "true" THEN
+       SET @buildPropertyVisibility = CONCAT(@buildPropertyVisibility,FIELD(@rCampaignFields,"Name"),',')                                              IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("SET @buildPropertyVisibility to : ",@buildPropertyVisibility)) ENDIF
+     ENDIF
+
+    NEXT @f
+                                                                                                                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("pre build property update : ",@buildPropertyVisibility)) ENDIF
+                                                                                                                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("property DE : ",@createPropDETgt)) ENDIF
+    UpdateData(@rootDE,1,'rootCampaignTgtDE',@createPropDETgt,'propertyFieldVisibility',@buildPropertyVisibility)
+                                                                                                                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("post build property update : ",@buildPropertyVisibility)) ENDIF
+   ENDIF
+
+
+
+
+  Set @statusCode3 = InvokeCreate(@de, @StatMessage, @ErrorCode)                                                                                       IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Finalize fields code: ",@statusCode3)) ENDIF
+
+  IF @statusCode3 == "OK" THEN
+    SET @rsProperties = LookupRows("Properties",'return','return')
+    SET @rcProperties = RowCount(@rsProperties)                                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Start Pull Fields for new DE - rcProperties: ",@rcProperties)) ENDIF
+
+    IF @rcProperties > 0 THEN
+
+     FOR @p = 1 TO @rcProperties DO
+
+      SET @rProp = ROW(@rsProperties,@p)                                                                                                               IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("Row For prop DE Equals: ",@p)) ENDIF
+      SET @selectedPropCode = FIELD(@rProp,"PropertyCode")                                                                                             IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("selectedPropCode: ",@selectedPropCode)) ENDIF
+      SET @selectedPropName = FIELD(@rProp,"City")                                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("selectedPropName: ",@selectedPropName)) ENDIF
+
+      /* If property options list is filled in, then add only the properties from the list */                                                          IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("if not empty: ",@propertyOptions)) ENDIF
+      IF NOT EMPTY(@propertyOptions) THEN
+        IF IndexOf(@propertyOptions,@selectedPropName) > 0 THEN                                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("index of : ",@selectedPropName," is ",IndexOf(@propertyOptions,@selectedPropName))) ENDIF
+          InsertDE(@createPropDEName,"property",@selectedPropCode)                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT(@createPropDEName," de into field property: ",@selectedProp)) ENDIF
+        ENDIF
+      ELSE
+        InsertDE(@createPropDEName,"property",@selectedPropCode)                                                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT(@createPropDEName," de into field property: ",@selectedProp)) ENDIF
+      ENDIF
+     NEXT @p
+
+     /* Once all properties are created, then take the de target vars from above and update the master DE to point to the new created property DE */
+     UpsertData(@createPropDETgt,1,"campaignID",@createPropCampaignID,"campaignDE",@createPropDEName)                                                  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("UPDATED DE: ",@createPropDETgt," on type: ","campaignID", " on row: ",@createPropCampaignID, " on var: ","campaignDE"," with value: ", @createPropDEName)) ENDIF
+
+
+    ENDIF
+
+  ENDIF
+
+  SET @statusMessage = CONCAT(@statusMessage," + propDE: ",@statusCode3)                                                                               IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("statusMessage: ",@statusMessage)) ENDIF
+
+ ENDIF
+
+
+
+ /* ------------------ Return Calls ------------------ */
+
+  ]%%%%=v(@selectedCampaign)=%%|%%=v(@changeID)=%%¦%%=v(@statusMessage)=%%^%%[
+
+
+ /* ------------------ Start root campaign data pull - pull all records from the root DE ------------------ */
+
+
+
+  SET @rootIndexOrder = CONCAT("rootCampaignID","|","false","|","Campaign ID","|","false","¦","rootCampaignName","|","false","|","Campaign Name","¦","rootCampaignTgtDE","|","false","|","Target DE","|","false","¦","rootDateStart","|","false","|","Start Date","¦","rootDateEnd","|","false","|","End Date","¦","rootCampaignDesc","|","false","|","Description","|","false","¦","rootStatus","|","false","|","Status","|","false")           IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rootIndexOrder: ",@rootIndexOrder))) ENDIF
+
+  SET @rsEmailList = LookupOrderedRows(@rootDE,100,"rootCampaignDateCreated desc","return","return")                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rsEmailList: ",@rsEmailList))) ENDIF
+
+  SET @rcEmailList = RowCount(@rsEmailList)
+  FOR @i = 1 TO @rcEmailList DO
+
+   IF @rcEmailList > 0 THEN
+     SET @rEmailList = ROW(@rsEmailList,@i)
+
+     SET @rootCampaignID = FIELD(@rEmailList,"rootCampaignID")
+     SET @rootCampaignName = Replace(Trim(FIELD(@rEmailList,"rootCampaignName")),' ','_')
+     SET @rootCampaignTgtDE = Trim(FIELD(@rEmailList,"rootCampaignTgtDE"))
+     SET @rootCampaignDateCreated = FIELD(@rEmailList,"rootCampaignDateCreated",'0')
+     SET @rootCampaignDesc = FIELD(@rEmailList,"rootCampaignDesc",'0')
+     SET @rootStatus = FIELD(@rEmailList,"rootStatus",'0')
+     SET @rootDateStart = FIELD(@rEmailList,"rootDateStart",'0')
+     SET @rootDateEnd = FIELD(@rEmailList,"rootDateEnd",'0')
+     SET @rootvHTML = FIELD(@rEmailList,"vHTML",'0')
+
+     /* Send data for root data pull by default */
+                                                                                                                                                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rootCampaignID: ",@rootCampaignID, " rootCampaignName: ", @rootCampaignName, " rootCampaignTgtDE: ",@rootCampaignTgtDE, " rootvHTML: ",@rootvHTML,))) ENDIF
+     ]%%%%=v(@rootCampaignID)=%%|%%=v(@rootCampaignName)=%%|%%=v(@rootCampaignTgtDE)=%%|%%=FormatDate(@rootDateStart,"MM/DD/YYYY")=%%|%%=FormatDate(@rootDateEnd,"MM/DD/YYYY")=%%|%%=v(@rootCampaignDesc)=%%|%%=v(@rootStatus)=%%¦%%[
+
+     IF NOT EMPTY(@selectedCampaign) THEN
+     IF @rootCampaignTgtDE == @selectedCampaign THEN
+     SET @rootSelectedString = CONCAT(@rootCampaignID,"|",@rootCampaignName,"|",@rootCampaignDesc,"|",@rootCampaignTgtDE,"|",@rootStatus,"|",FormatDate(@rootDateStart,"MM/DD/YYYY"),"|",FormatDate(@rootDateEnd,"MM/DD/YYYY"))             IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rootSelectedString: ",@rootSelectedString))) ENDIF
+     ENDIF
+     ENDIF
+
+   ENDIF
+
+  NEXT @i
+
+  ]%%^%%=v(@rootIndexOrder)=%%%%[
+
+  ]%%^%%[
+  ]%%%%=v(@rootSelectedString)=%%%%[
+  ]%%^%%[
+    /* ------------------ Start master campaign data pull - pull all records from the requested master DE ------------------ */
+
+                                                                                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("start data pull with: ",@selectedCampaign))) ENDIF
+    SET @rsFieldsIndex = LookupOrderedRows('create_campaign_fields_index',100,'order asc','return','return')
+    SET @rcFieldsIndex = RowCount(@rsFieldsIndex)                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcFieldsIndex: ",@rcFieldsIndex))) ENDIF
+
+    IF NOT EMPTY(@selectedCampaign) THEN
+      SET @lookupRecordsDE = Lookup(@rootDE,'recordsDE','rootCampaignTgtDE',@selectedCampaign)                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("lookupRecordsDE: ",@lookupRecordsDE))) ENDIF
+      SET @rsCampaignMaster = LookupRows(@selectedCampaign,'return','return')                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("selectedCampaign: ",@selectedCampaign))) ENDIF
+      SET @rcCampaignMaster = RowCount(@rsCampaignMaster)                                                                                            IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcCampaignMaster: ",@rcCampaignMaster))) ENDIF
+
+     IF @rcFieldsIndex > 0 THEN                                                                                                                      IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcFieldsIndex ",@rcFieldsIndex))) ENDIF
+     IF @rcCampaignMaster > 0 THEN                                                                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcCampaignMaster ",@rcCampaignMaster))) ENDIF
+
+     FOR @c = 1 TO @rcCampaignMaster DO                                                                                                              IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("c: ",@c))) ENDIF
+      FOR @z = 1 TO @rcFieldsIndex DO                                                                                                                IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("z: ",@z))) ENDIF
+
+       SET @ritem = ROW(@rsCampaignMaster,@c)                                                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("ritem: ",@ritem))) ENDIF
+
+       /*Set row, set the name of the field to the index list*/
+       SET @rfield = ROW(@rsFieldsIndex,@z)                                                                                                          IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rfield: ",@rfield))) ENDIF
+       SET @fieldName = FIELD(@rfield,'Name')                                                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldName: ",@fieldName))) ENDIF
+
+       /*Get value of attribute in campaign row*/
+       SET @selectedFieldValue = FIELD(@ritem,@fieldName,0)                                                                                          IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("selectedFieldValue: ",@selectedFieldValue))) ENDIF
+
+       /*Build string to output with field values*/
+       SET @segmentOutput = CONCAT(@segmentOutput,@selectedFieldValue)
+
+       /*Add pipe to end except for last row, add data extension, and add double pipe*/
+       IF @z != @rcFieldsIndex THEN SET @segmentOutput = CONCAT(@segmentOutput,'|')
+       ELSE SET @segmentOutput = CONCAT(@segmentOutput,'|detgt__',@selectedCampaign,'¦') ENDIF                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("segmentOutput: ",@segmentOutput))) ENDIF
+
+       /*Build list of campaign IDs to pull below for the detilas*/
+       IF @fieldName == "campaignDE" THEN SET @segmentString = CONCAT(@segmentString,@selectedFieldValue,'|') ENDIF                                  IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("segmentString: ",@segmentString))) ENDIF
+
+      NEXT @z
+     NEXT @c
+
+    ENDIF
+    ENDIF
+  ENDIF
+
+                                                                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("printedString: !!!!"))) ENDIF
+  /*If field index is empty, where no campaign was found, generate it to return*/
+  IF @fieldIndexString == "" THEN                                                                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("field index empty: ",@fieldIndexString))) ENDIF
+
+    IF EMPTY(@buildCampaignVisibility) THEN SET @buildCampaignVisibility = Lookup(@rootDE,'campaignFieldVisibility','rootCampaignTgtDE',@selectedCampaign) ENDIF          IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("buildCampaignVisibility: ",@buildCampaignVisibility))) ENDIF
+
+      FOR @i = 1 TO @rcFieldsIndex DO                                                                                                               IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("for loop val: ",@i," to ",@rcFieldsIndex))) ENDIF
+        SET @rfield = ROW(@rsFieldsIndex,@i)                                                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rfield: ",@rfield))) ENDIF
+        SET @fieldName = FIELD(@rfield,'Name')                                                                                                      IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldName: ",@fieldName))) ENDIF
+        SET @fieldEditable = FIELD(@rfield,'editable')
+        SET @displayName = FIELD(@rfield,'displayName')                                                                                             IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("displayName: ",@displayName))) ENDIF
+        SET @defaultVis = FIELD(@rfield,'defaultVis')                                                                                               IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("defaultVis: ",@defaultVis))) ENDIF
+        SET @addClass = FIELD(@rfield,'addClass')                                                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("addClass: ",@addClass))) ENDIF
+        SET @options = FIELD(@rfield,'options')                                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("options: ",@options))) ENDIF
+                                                                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("index of : ",@fieldName," index: ",IndexOf(@buildCampaignVisibility,@fieldName)," in ",@buildCampaignVisibility)) ENDIF
+        IF IndexOf(@buildCampaignVisibility,@fieldName) > 0 THEN
+          SET @showField = "true"                                                                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("show field : true")) ENDIF
+        ELSE
+          SET @showField = "false"                                                                                                                  IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("show field : false")) ENDIF
+        ENDIF
+
+        SET @fieldIndexString = CONCAT(@fieldIndexString,'c_',@fieldName,'|',@fieldEditable,'|',@displayName,'|',@showField,'|',@addClass,'|',@options,'|',@defaultVis,'¦')                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldIndexString: ",@fieldIndexString)) ENDIF
+      NEXT @i
+    ENDIF
+
+
+  IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("endloop: !!!! - Print Segment: ",@segmentOutput)) ENDIF
+
+  ]%%%%=v(@segmentOutput)=%%^%%=v(@fieldIndexString)=%%^%%[
+
+
+
+
+   /* ------------------ increment through the campaign IDs built above and populate the details from them ------------------ */
+
+   SET @fieldIndexString = "";
+
+   SET @rsSegmentOpen = BuildRowSetFromString(@segmentString,'|')                                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("segmentString: ",@segmentString))) ENDIF
+   SET @rcSegmentOpen = RowCount(@rsSegmentOpen)                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcSegmentOpen: ",@rcSegmentOpen))) ENDIF
+
+   IF @rcSegmentOpen > 0 THEN
+
+   SET @rsFieldsIndex = LookupOrderedRows('prop_campaign_fields_index',100,'order asc','return','return')
+   SET @rcFieldsIndex = RowCount(@rsFieldsIndex)                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcFieldsIndex: ",@rcFieldsIndex))) ENDIF
+
+    FOR @r = 1 TO @rcSegmentOpen DO                                                                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("r: ",@r))) ENDIF
+
+    SET @rSegSelectionDE = Field(ROW(@rsSegmentOpen,@r),1)
+
+    IF NOT EMPTY(trim(@rSegSelectionDE)) THEN
+
+      SET @rsCampaignSegment = LookupRows(@rSegSelectionDE,'return','return')
+      SET @rcCampaignSegment = RowCount(@rsCampaignSegment)                                                                                         IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcCampaignSegment: ",@rcCampaignSegment))) ENDIF
+
+      IF @rcFieldsIndex > 0 THEN                                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcFieldsIndex ",@rcFieldsIndex))) ENDIF
+      IF @rcCampaignSegment > 0 THEN                                                                                                                IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcCampaignSegment ",@rcCampaignSegment))) ENDIF
+       /*For each property go through and grab variables in the prop index data extension*/
+      FOR @c = 1 TO @rcCampaignSegment DO                                                                                                           IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("c: ",@c))) ENDIF
+       SET @propertyOutput = ""
+       FOR @z = 1 TO @rcFieldsIndex DO                                                                                                              IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("z: ",@z))) ENDIF
+
+       SET @ritem = ROW(@rsCampaignSegment,@c)                                                                                                      IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("ritem: ",@ritem))) ENDIF
+
+       /*Set row, set the name of the field to the index list*/
+       SET @rfield = ROW(@rsFieldsIndex,@z)
+       SET @fieldName = FIELD(@rfield,'Name')                                                                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldName: ",@fieldName))) ENDIF
+       SET @fieldEditable = FIELD(@rfield,'editable')                                                                                               IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldEditable: ",@fieldEditable))) ENDIF
+       SET @fieldDisplayName = FIELD(@rfield,'displayName')                                                                                         IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldDisplayName: ",@fieldDisplayName))) ENDIF
+
+       /*Get value of attribute in campaign row*/
+       SET @selectedFieldValue = FIELD(@ritem,@fieldName,0)                                                                                         IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("selectedFieldValue: ",@selectedFieldValue))) ENDIF
+
+       /*Build string to output with field values*/
+       SET @propertyOutput = CONCAT(@propertyOutput,@selectedFieldValue)
+
+       /*Add pipe to end except for last row, log data extension name and add split pipe*/
+       IF @z != @rcFieldsIndex THEN SET @propertyOutput = CONCAT(@propertyOutput,'|')
+       ELSE SET @propertyOutput = CONCAT(@propertyOutput,'|detgt__',@rSegSelectionDE,'¦') ENDIF                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("propertyOutput: ",@propertyOutput))) ENDIF
+
+       NEXT @z
+      ]%%%%=v(@propertyOutput)=%%%%[
+      NEXT @c
+
+   ENDIF
+   ENDIF
+   ENDIF
+   NEXT @r
+
+   ENDIF
+
+   IF @fieldIndexString == "" THEN                                                                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("field index empty: ",@fieldIndexString))) ENDIF
+
+     IF EMPTY(@buildPropertyVisibility) THEN SET @buildPropertyVisibility = Lookup(@rootDE,'propertyFieldVisibility','rootCampaignTgtDE',@selectedCampaign) ENDIF          IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("buildPropertyVisibility: ",@buildPropertyVisibility))) ENDIF
+
+     SET @rsFieldsIndex = LookupOrderedRows('prop_campaign_fields_index',100,'order asc','return','return')
+     SET @rcFieldsIndex = RowCount(@rsFieldsIndex)                                                                                                   IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("rcFieldsIndex: ",@rcFieldsIndex))) ENDIF
+     FOR @p = 1 TO @rcFieldsIndex DO                                                                                                                 IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("for loop val: ",@p," to ",@rcFieldsIndex))) ENDIF
+       SET @rfield = ROW(@rsFieldsIndex,@p)
+       SET @fieldName = FIELD(@rfield,'Name')                                                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldName: ",@fieldName))) ENDIF
+       SET @fieldEditable = FIELD(@rfield,'editable')                                                                                                IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldEditable: ",@fieldEditable))) ENDIF
+       SET @fieldDisplayName = FIELD(@rfield,'displayName')                                                                                          IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldDisplayName: ",@fieldDisplayName))) ENDIF
+       SET @defaultVis = FIELD(@rfield,'defaultVis')                                                                                                 IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("defaultVis: ",@defaultVis))) ENDIF
+       SET @addClass = FIELD(@rfield,'addClass')                                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("addClass: ",@addClass))) ENDIF
+       SET @options = FIELD(@rfield,'options')                                                                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("options: ",@options))) ENDIF
+
+       IF IndexOf(@buildPropertyVisibility,@fieldName) > 0 THEN
+         SET @showField = "true"                                                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("show field : true")) ENDIF
+       ELSE
+         SET @showField = "false"                                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("show field : false")) ENDIF
+       ENDIF
+
+       SET @fieldIndexString = CONCAT(@fieldIndexString,'p_',@fieldName,'|',@fieldEditable,'|',@fieldDisplayName,'|',@showField,'|',@addClass,'|',@options,'|',@defaultVis,'¦')                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldIndexString: ",@fieldIndexString))) ENDIF
+
+     NEXT @p
+   ENDIF
+
+   ]%%^%%=v(@fieldIndexString)=%%%%[                                                                                                                 IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldIndexString: ",@fieldIndexString))) ENDIF
+
+                                                                                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("is currentChangeSet empty?: ",@currentChangeSet))) ENDIF
+ /*IF NOT EMPTY(@currentChangeSet) THEN*/
+                                                                                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("pre compare: ",@currentChangeSet, " and :",@changeID))) ENDIF
+   /*IF (@currentChangeSet < @changeID) THEN*/                                                                                                       IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("post compare: ",@currentChangeSet, " and :",@changeID))) ENDIF
+      IF NOT EMPTY(@lookupRecordsDE) THEN
+      SET @changeSetString = ""
+        /*FOR @r = Add(@currentChangeSet,'1') TO @changeID DO*/
+        /*USE THIS FOR ONLY THE LAST CHANGESET: SET @rsChangeIndex = LookupRows(@lookupRecordsDE,'changeID',@r)*/
+          SET @rsChangeIndex = LookupRows(@lookupRecordsDE,'return','return')
+          SET @rcChangeIndex = ROWCOUNT(@rsChangeIndex)
+          FOR @x = 1 TO @rcChangeIndex DO
+            SET @rChangeField = ROW(@rsChangeIndex,@x)
+            SET @fieldTS = FIELD(@rChangeField,'timestamp')                                                                                          IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("timestamp: ",@fieldTS))) ENDIF
+            SET @fieldUser = FIELD(@rChangeField,'user')                                                                                             IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("fieldUser: ",@fieldUser))) ENDIF
+            SET @fieldPV = FIELD(@rChangeField,'previousVal')                                                                                        IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("previousVal: ",@fieldPV))) ENDIF
+            SET @fieldNew = FIELD(@rChangeField,'newVal')                                                                                            IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("newVal: ",@fieldNew))) ENDIF
+            SET @fieldDE = FIELD(@rChangeField,'dataExtension')                                                                                      IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("dataExtension: ",@fieldDE))) ENDIF
+            SET @fieldField = FIELD(@rChangeField,'deField')                                                                                         IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("deField: ",@fieldField))) ENDIF
+            SET @fieldRow = FIELD(@rChangeField,'deRow')                                                                                             IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("deRow: ",@fieldRow))) ENDIF
+            SET @fieldRowType = FIELD(@rChangeField,'deRowType')                                                                                     IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("deRowType: ",@fieldRowType))) ENDIF
+            SET @fieldCID = FIELD(@rChangeField,'changeID')                                                                                          IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("changeID: ",@fieldCID))) ENDIF
+
+            SET @changeSetString = CONCAT(@changeSetString,@fieldTS,"|",@fieldUser,"|",@fieldPV,"|",@fieldNew,"|",@fieldDE,"|",@fieldField,"|",@fieldRow,"|",@fieldRowType,"|",@fieldCID,"¦")
+          NEXT @x
+        /*NEXT @r*/
+      ENDIF
+   /*ENDIF*/
+
+ /*ENDIF*/
+
+ ]%%^%%=v(@changeSetString)=%%%%[
+
+ SET @rsProperties = LookupOrderedRows("Properties","0","order ASC",'return','return')
+ SET @rcProperties = RowCount(@rsProperties)                                                                                                        IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("Start Pull Fields for new DE - rcProperties: ",@rcProperties)) ENDIF
+
+ IF @rcProperties > 0 THEN
+  SET @propertyString = ""
+  FOR @p = 1 TO @rcProperties DO
+
+   SET @rProp = ROW(@rsProperties,@p)                                                                                                               IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("Row For prop DE Equals: ",@p)) ENDIF
+   SET @propertyCode = FIELD(@rProp,"PropertyCode")                                                                                                 IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("selectedProp: ",@selectedProp)) ENDIF
+   SET @propertyCity = FIELD(@rProp,"City")                                                                                                         IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("selectedProp: ",@selectedProp)) ENDIF
+
+   SET @propertyString = CONCAT(@propertyString,@propertyCode,"|",@propertyCity,"¦")                                                                IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("changeSetString: ",@changeSetString)) ENDIF
+
+  NEXT @p
+
+ ENDIF
+
+ ]%%^%%=v(@propertyString)=%%%%[
+                                                                                                                                                    IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("print login: ",@username," token: ",@generateToken)) ENDIF
+ ]%%^%%=v(@userLoggedIn)=%%|%%=v(@generateToken)=%%%%[
+
+                                                                                                                                                    IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("reached end of main call ~~~~~~~~~~~~~~~~~~~"))) ENDIF
+ ELSE
+ IF NOT EMPTY(@messageStatus) THEN                                                                                                                  IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("status: ",@messageStatus))) ENDIF
+    ]%%%%=v(@messageStatus)=%%%%[
+ ELSE                                                                                                                                               IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("user not logged in"))) ENDIF
+    ]%%USER NOT LOGGED IN%%[
+ ENDIF
+ ENDIF
+ IF @logLayer >= "2" THEN InsertDE("portalv2log","logVal",CONCAT("reached end *********************************"))) ENDIF
+ ]%%
+
+
+
+ </div>
+<body>
+</body>
+</html>
