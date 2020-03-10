@@ -230,7 +230,7 @@
         <div id="editCampaignNameDiv"><span class="spanBlock" id="editCampaignName" contenteditable="true"></span></div>
         <div id="editCampaignDatesDiv"><span class="spanBlock dateSelect" id="editCampaignDateStart" contenteditable="true"></span><br /><span class="spanBlock dateSelect" id="editCampaignDateEnd" contenteditable="true"></span></div>
         <div id="editCampaignDescriptionDiv"><span class="spanBlock" id="editCampaignDescription" contenteditable="true"></span></div>
-        <div id="editCampaignInfo"><span class="spanBlock" id="editCampaignID" contenteditable="true"></span><br /><span class="spanBlock" id="editCampaignDE" contenteditable="true"></span></div>
+        <div id="editCampaignInfo"><span class="spanBlock" id="editCampaignID" contenteditable="false"></span><br /><span class="spanBlock" id="editCampaignDE" contenteditable="false"></span></div>
         <div id="editCampaignOptions"></div>
         <div id="editCampaignSave"><span class="spanBlock hidden" data-name="propertyFieldOptions" data-detarget="rootCampaign" id="editPropertyFieldOptions" contenteditable="true"><span class="spanBlock hidden" data-name="campaignFieldOptions" data-detarget="rootCampaign" id="editCampaignFieldOptions" contenteditable="true"></div>
       </div>
