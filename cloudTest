@@ -16,7 +16,6 @@
    html, body {
     height: 100%;
    }
-
    input:disabled {
      background: #dddddd;
    }
@@ -233,6 +232,7 @@
         <div id="editCampaignInfo"><span class="spanBlock" id="editCampaignID" contenteditable="false"></span><br /><span class="spanBlock" id="editCampaignDE" contenteditable="false"></span></div>
         <div id="editCampaignOptions"></div>
         <div id="editCampaignSave"><span class="spanBlock hidden" data-name="propertyFieldOptions" data-detarget="rootCampaign" id="editPropertyFieldOptions" contenteditable="true"><span class="spanBlock hidden" data-name="campaignFieldOptions" data-detarget="rootCampaign" id="editCampaignFieldOptions" contenteditable="true"></div>
+        <div id="generateSegmentContainer"></div>
       </div>
       <div id="campaignTableStore"></div>
       <div id="propTableStore"></div>
@@ -1329,7 +1329,7 @@ function collectText() {
   };
 
   if (clearUndefined(globalSelectedCampaign) != "") {
-    $(".navMenu").append($(' <a href="#" class="genSegment" style="text-decoration: none; color: #4B06DC; font-size: 16px; padding-top: 14px; padding-left: 6px;"/>').html('<span class="glyphicon glyphicon-certificate"></span> Generate Segment'));
+    $("#generateSegmentContainer").append($(' <a href="#" class="genSegment" style="text-decoration: none; color: #4B06DC; font-size: 16px; padding-top: 14px; padding-left: 6px;"/>').html('<span class="glyphicon glyphicon-certificate"></span> Generate Segment'));
     var targetMark = "#row_" + globalSelectedCampaign.replace("_MASTER_DE","");
     $(targetMark).addClass("selectedHighlight")
   };
