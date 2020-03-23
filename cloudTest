@@ -1468,7 +1468,7 @@ var arrayToTable = function (data, indexArr, rowClass, options, appendTgt, inclu
           };
         };
         data.push(tmpArr);
-        table.attr('class','newSegTable');
+        table.attr('class','newSegTable uiTable');
         var rowtypeNew = "new";
         var idString = "newrow_";
       };
