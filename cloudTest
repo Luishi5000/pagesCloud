@@ -364,7 +364,7 @@
     populateCampaign(selectedRoot[0][0],selectedRoot[0][1],selectedRoot[0][2],selectedRoot[0][3],selectedRoot[0][4],selectedRoot[0][5],selectedRoot[0][6],selectedRoot[0][7],selectedRoot[0][8]);
   });
 
-  $('.navMenu').on('click', '.genSegment', function(e){
+  $('#generateSegmentContainer').on('click', '.genSegment', function(e){
     $(this).blur();
     e.preventDefault();
     newSegment(globalCampaignFieldsOrder);
