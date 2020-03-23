@@ -1589,7 +1589,12 @@ var arrayToTable = function (data, indexArr, rowClass, options, appendTgt, inclu
       };
 
       if (typeof appendTgt !== "undefined") {
-        $(appendTgt).append(row)
+        if ($(appendTgt).length) {
+          $(appendTgt).append(row)
+        } else {
+          $('#campaignTableStore').append(table);
+        }
+
       };
 
       return table;
