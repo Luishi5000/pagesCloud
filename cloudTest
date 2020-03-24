@@ -1329,6 +1329,7 @@ function collectText() {
   };
 
   if (clearUndefined(globalSelectedCampaign) != "") {
+    $("#generateSegmentContainer").empty();
     $("#generateSegmentContainer").append($(' <a href="#" class="genSegment" style="text-decoration: none; color: #4B06DC; font-size: 16px; padding-top: 14px; padding-left: 6px;"/>').html('<span class="glyphicon glyphicon-certificate"></span> Generate Segment'));
     var targetMark = "#row_" + globalSelectedCampaign.replace("_MASTER_DE","");
     $(targetMark).addClass("selectedHighlight")
