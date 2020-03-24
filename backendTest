@@ -17,9 +17,9 @@ Variable.SetValue("ip",ip);
 
     %%[
     /* ------------------ Gather Header Information ------------------ */
-  SET @logLayer = "0"
+  SET @logLayer = "2"
 
-  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("updateid: 005")) ENDIF
+  IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("updateid: 007")) ENDIF
 
 
   SET @requestedCampaign = RequestParameter('campaign')                                                                                                                                 IF @logLayer >= "1" THEN InsertDE("portalv2log","logVal",CONCAT("requestedCampaign: ",@requestedCampaign)) ENDIF
