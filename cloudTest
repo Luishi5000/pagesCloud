@@ -578,7 +578,7 @@
         globalShiftPressed = 1;
       }
       getChanged = clearUndefined($(event.target).data("changed"));
-      if ($(event.target).hasClass("nopop") != "true") {
+      if ($(event.target).hasClass("nopop") != true) {
         popHistory(getChanged);
       };
     };
